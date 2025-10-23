@@ -96,6 +96,19 @@ function saveSettings(settings) {
 }
 
 /**
+ * 保存API配置文件
+ * @param {Array} apiConfigs API配置数组
+ */
+function saveApiConfigs(apiConfigs) {
+  try {
+    fs.writeFileSync(API_CONFIGS_FILE, JSON.stringify(apiConfigs, null, 2), 'utf8');
+  } catch (error) {
+    console.error(chalk.red(`保存API配置文件失败: ${error.message}`));
+    process.exit(1);
+  }
+}
+
+/**
  * 保存配置时保持现有的hooks和其他设置
  * @param {Object} newConfig 新的配置对象
  */
@@ -517,6 +530,114 @@ function openConfigFile(filePath) {
 }
 
 /**
+ * 添加新的API配置
+ */
+function addConfig() {
+  inquirer
+    .prompt([
+      {
+        type: 'input',
+        name: 'name',
+        message: '请输入配置名称:',
+        validate: (input) => {
+          if (!input.trim()) {
+            return '配置名称不能为空';
+          }
+          const apiConfigs = readApiConfigs();
+          if (apiConfigs.some(config => config.name === input.trim())) {
+            return `配置名称 "${input.trim()}" 已存在，请使用其他名称`;
+          }
+          return true;
+        }
+      },
+      {
+        type: 'input',
+        name: 'baseUrl',
+        message: '请输入API Base URL:',
+        validate: (input) => {
+          if (!input.trim()) {
+            return 'API Base URL不能为空';
+          }
+          return true;
+        }
+      },
+      {
+        type: 'input',
+        name: 'authToken',
+        message: '请输入Auth Token:',
+        validate: (input) => {
+          if (!input.trim()) {
+            return 'Auth Token不能为空';
+          }
+          return true;
+        }
+      },
+      {
+        type: 'input',
+        name: 'model',
+        message: '请输入Model (可选，直接回车跳过):',
+        default: ''
+      }
+    ])
+    .then(answers => {
+      // 构建新的配置对象
+      const newConfig = {
+        name: answers.name.trim(),
+        config: {
+          env: {
+            ANTHROPIC_AUTH_TOKEN: answers.authToken.trim(),
+            ANTHROPIC_BASE_URL: answers.baseUrl.trim(),
+            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+          },
+          permissions: {
+            allow: [],
+            deny: []
+          }
+        }
+      };
+
+      // 如果用户输入了model，添加到配置中
+      if (answers.model.trim()) {
+        newConfig.config.model = answers.model.trim();
+      }
+
+      // 显示新配置并确认
+      console.log(chalk.cyan('\n新配置预览:'));
+      console.log(JSON.stringify(newConfig, null, 2));
+
+      inquirer
+        .prompt([
+          {
+            type: 'confirm',
+            name: 'confirm',
+            message: '确认添加此配置?',
+            default: true
+          }
+        ])
+        .then(confirmAnswer => {
+          if (confirmAnswer.confirm) {
+            // 读取现有配置
+            const apiConfigs = readApiConfigs();
+
+            // 添加新配置
+            apiConfigs.push(newConfig);
+
+            // 保存配置
+            saveApiConfigs(apiConfigs);
+
+            console.log(chalk.green(`\n成功添加配置: ${newConfig.name}`));
+            console.log(chalk.cyan(`当前共有 ${apiConfigs.length} 个配置`));
+          } else {
+            console.log(chalk.yellow('\n操作已取消'));
+          }
+        });
+    })
+    .catch(error => {
+      console.error(chalk.red(`发生错误: ${error.message}`));
+    });
+}
+
+/**
  * 显示版本信息
  */
 function showVersion() {
@@ -557,6 +678,14 @@ openCommand
   .description('打开设置配置文件 (settings.json)')
   .action(() => {
     openConfigFile(SETTINGS_FILE);
+  });
+
+program
+  .command('add')
+  .description('添加新的API配置')
+  .action(() => {
+    ensureConfigDir();
+    addConfig();
   });
 
 // 注册notify相关命令
