@@ -17,7 +17,7 @@ const notify = require('./notify');
 const health = require('./health');
 
 // 版本号
-const VERSION = '1.7.0';
+const VERSION = '1.8.0';
 
 // 配置文件路径
 const CONFIG_DIR = path.join(os.homedir(), '.claude');
@@ -109,30 +109,40 @@ function saveApiConfigs(apiConfigs) {
 }
 
 /**
- * 保存配置时保持现有的hooks和其他设置
- * @param {Object} newConfig 新的配置对象
+ * 保存配置时只更新API凭证，保持其他所有设置不变
+ * @param {Object} selectedConfig API配置对象（来自apiConfigs.json）
  */
-function saveSettingsPreservingHooks(newConfig) {
+function saveSettingsPreservingHooks(selectedConfig) {
   try {
     // 读取当前设置
     const currentSettings = readSettings();
-    
-    // 合并配置，只有当前设置中存在hooks时才保持
-    const mergedSettings = {
-      ...newConfig
-    };
-    
-    // 如果当前设置中有hooks，则保持
-    if (currentSettings.hooks) {
-      mergedSettings.hooks = currentSettings.hooks;
+
+    // 确保 env 对象存在
+    if (!currentSettings.env) {
+      currentSettings.env = {};
     }
-    
-    // 如果当前设置中有statusLine，则保持
-    if (currentSettings.statusLine) {
-      mergedSettings.statusLine = currentSettings.statusLine;
+
+    // 从配置中提取 authToken 和 baseUrl（兼容两种格式）
+    let authToken, baseUrl;
+    if (selectedConfig.config && selectedConfig.config.env) {
+      // 完整格式：{ name, config: { env: { ... } } }
+      authToken = selectedConfig.config.env.ANTHROPIC_AUTH_TOKEN;
+      baseUrl = selectedConfig.config.env.ANTHROPIC_BASE_URL;
+    } else if (selectedConfig.authToken && selectedConfig.baseUrl) {
+      // 简化格式：{ name, authToken, baseUrl }
+      authToken = selectedConfig.authToken;
+      baseUrl = selectedConfig.baseUrl;
+    } else {
+      throw new Error('无效的配置格式');
     }
-    
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(mergedSettings, null, 2), 'utf8');
+
+    // 只更新这3个字段，保留所有其他设置
+    currentSettings._configName = selectedConfig.name;
+    currentSettings.env.ANTHROPIC_AUTH_TOKEN = authToken;
+    currentSettings.env.ANTHROPIC_BASE_URL = baseUrl;
+
+    // 保存（所有其他字段：permissions、model、alwaysThinkingEnabled、hooks、statusLine、mcpServers 等都原封不动）
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(currentSettings, null, 2), 'utf8');
   } catch (error) {
     console.error(chalk.red(`保存设置文件失败: ${error.message}`));
     process.exit(1);
@@ -166,25 +176,34 @@ function deepEqual(obj1, obj2) {
 
 /**
  * 获取当前激活的API配置
+ * 优先使用 _configName 匹配，降级使用 URL/Token 匹配
  * @returns {Object|null} 当前激活的配置对象或null（如果没有找到）
  */
 function getCurrentConfig() {
   const settings = readSettings();
-  
+
   // 如果settings为空，返回null
   if (!settings || Object.keys(settings).length === 0) {
     return null;
   }
-  
-  // 查找匹配的配置，只比较核心字段
+
   const apiConfigs = readApiConfigs();
+
+  // 优先使用配置名称匹配（更快更准确）
+  if (settings._configName) {
+    const matched = apiConfigs.find(config => config.name === settings._configName);
+    if (matched) {
+      return matched;
+    }
+  }
+
+  // 降级：使用 URL/Token 匹配（兼容旧版本或手动修改的情况）
   return apiConfigs.find(config => {
     if (!config.config) return false;
-    
-    // 主要比较 env 字段中的关键配置
+
     const currentEnv = settings.env || {};
     const configEnv = config.config.env || {};
-    
+
     return currentEnv.ANTHROPIC_BASE_URL === configEnv.ANTHROPIC_BASE_URL &&
            currentEnv.ANTHROPIC_AUTH_TOKEN === configEnv.ANTHROPIC_AUTH_TOKEN;
   }) || null;
@@ -326,8 +345,8 @@ function processSelectedConfig(selectedConfig) {
     ])
     .then(confirmAnswer => {
       if (confirmAnswer.confirm) {
-        // 保存配置时保持现有的hooks设置
-        saveSettingsPreservingHooks(selectedConfig.config);
+        // 只更新API凭证和配置名称，保留所有其他设置
+        saveSettingsPreservingHooks(selectedConfig);
         
         console.log(chalk.green(`\n成功切换到配置: ${selectedConfig.name}`));
         
@@ -429,8 +448,8 @@ function setConfig(index) {
     ])
     .then(answers => {
       if (answers.confirm) {
-        // 直接使用选择的配置替换整个settings.json
-        saveSettingsPreservingHooks(selectedConfig.config);
+        // 只更新API凭证和配置名称，保留所有其他设置
+        saveSettingsPreservingHooks(selectedConfig);
         
         console.log(chalk.green(`\n成功切换到配置: ${selectedConfig.name}`));
       } else {
@@ -638,6 +657,100 @@ function addConfig() {
 }
 
 /**
+ * 删除API配置
+ */
+function removeConfig() {
+  const apiConfigs = readApiConfigs();
+
+  if (apiConfigs.length === 0) {
+    console.log(chalk.yellow('没有找到可用的API配置'));
+    return;
+  }
+
+  // 获取当前激活的配置
+  const currentConfig = getCurrentConfig();
+
+  // 找出最长的名称长度，用于对齐
+  const maxNameLength = apiConfigs.reduce((max, config) =>
+    Math.max(max, config.name.length), 0);
+
+  // 准备选项列表
+  const choices = apiConfigs.map((config, index) => {
+    // 如果是当前激活的配置，添加标记
+    const isActive = currentConfig && config.name === currentConfig.name;
+
+    // 格式化配置信息
+    const paddedName = config.name.padEnd(maxNameLength, ' ');
+    const configInfo = `[${paddedName}]  ${config.config.env.ANTHROPIC_AUTH_TOKEN}  ${config.config.env.ANTHROPIC_BASE_URL}`;
+
+    return {
+      name: `${index + 1}. ${configInfo}${isActive ? chalk.green(' (当前)') : ''}`,
+      value: index
+    };
+  });
+
+  // 使用inquirer创建交互式菜单
+  inquirer
+    .prompt([
+      {
+        type: 'list',
+        name: 'configIndex',
+        message: '请选择要删除的配置:',
+        choices: choices,
+        pageSize: choices.length,
+        prefix: '',
+        suffix: '',
+      }
+    ])
+    .then(answers => {
+      const selectedIndex = answers.configIndex;
+      const selectedConfig = apiConfigs[selectedIndex];
+
+      // 显示要删除的配置并确认
+      console.log(chalk.cyan('\n要删除的配置:'));
+      console.log(JSON.stringify(selectedConfig, null, 2));
+
+      // 如果要删除的是当前激活的配置，给出警告
+      const isCurrentConfig = currentConfig && selectedConfig.name === currentConfig.name;
+      if (isCurrentConfig) {
+        console.log(chalk.yellow('\n⚠️  警告: 您正在删除当前激活的配置！'));
+      }
+
+      inquirer
+        .prompt([
+          {
+            type: 'confirm',
+            name: 'confirm',
+            message: '确认删除此配置?',
+            default: false
+          }
+        ])
+        .then(confirmAnswer => {
+          if (confirmAnswer.confirm) {
+            // 从数组中删除配置
+            apiConfigs.splice(selectedIndex, 1);
+
+            // 保存更新后的配置
+            saveApiConfigs(apiConfigs);
+
+            console.log(chalk.green(`\n成功删除配置: ${selectedConfig.name}`));
+            console.log(chalk.cyan(`当前共有 ${apiConfigs.length} 个配置`));
+
+            // 如果删除的是当前配置，提醒用户切换到其他配置
+            if (isCurrentConfig && apiConfigs.length > 0) {
+              console.log(chalk.yellow('\n提示: 您删除了当前激活的配置，请使用 ccs list 切换到其他配置'));
+            }
+          } else {
+            console.log(chalk.yellow('\n操作已取消'));
+          }
+        });
+    })
+    .catch(error => {
+      console.error(chalk.red(`发生错误: ${error.message}`));
+    });
+}
+
+/**
  * 显示版本信息
  */
 function showVersion() {
@@ -686,6 +799,15 @@ program
   .action(() => {
     ensureConfigDir();
     addConfig();
+  });
+
+program
+  .command('remove')
+  .alias('rm')
+  .description('删除API配置')
+  .action(() => {
+    ensureConfigDir();
+    removeConfig();
   });
 
 // 注册notify相关命令
