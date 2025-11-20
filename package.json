@@ -1,6 +1,6 @@
 {
   "name": "claude-config-switch",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Claude配置切换工具及其他工具",
   "main": "index.js",
   "bin": {

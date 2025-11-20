@@ -90,6 +90,7 @@ npm install -g .
 
 ```json
 {
+  "_configName": "zone",
   "env": {
     "ANTHROPIC_BASE_URL": "https://zone.veloera.org/pg",
     "ANTHROPIC_AUTH_TOKEN": "sk-XXXXXXX",
@@ -99,11 +100,60 @@ npm install -g .
     "allow": [],
     "deny": []
   },
-  "model": "claude-sonnet-4-20250514"
+  "model": "claude-sonnet-4-20250514",
+  "alwaysThinkingEnabled": true
 }
 ```
 
-**注意**：切换配置时，整个 `settings.json` 文件会被选中配置的 `config` 对象完全替换。
+**重要说明**：
+
+⚡ **配置切换行为（v1.8.0+ 重要更新）**
+
+从 v1.8.0 开始，切换配置时的行为已优化：
+
+- ✅ **只更新 API 凭证**：切换时仅更新以下 3 个字段
+  - `_configName` - 当前配置名称（新增）
+  - `env.ANTHROPIC_AUTH_TOKEN` - API 密钥
+  - `env.ANTHROPIC_BASE_URL` - API 端点
+
+- ✅ **保留所有其他设置**：以下配置完全保留
+  - `permissions` - 权限设置
+  - `model` - 模型配置
+  - `alwaysThinkingEnabled` - 思考模式
+  - `hooks` - 钩子配置
+  - `statusLine` - 状态栏配置
+  - `mcpServers` - MCP 服务器配置
+  - 任何其他自定义字段
+
+**使用场景**：
+```bash
+# 场景：你的 settings.json 中有很多自定义配置
+{
+  "env": { "ANTHROPIC_AUTH_TOKEN": "sk-old...", "ANTHROPIC_BASE_URL": "..." },
+  "alwaysThinkingEnabled": true,
+  "mcpServers": { "custom-server": {...} },
+  "permissions": { "allow": ["somePermission"] },
+  "customFeature": true
+}
+
+# 执行 ccs list 切换到新配置后
+{
+  "_configName": "new-config",  // ⚡ 已更新
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "sk-new...",  // ⚡ 已更新
+    "ANTHROPIC_BASE_URL": "https://new-url.com"  // ⚡ 已更新
+  },
+  "alwaysThinkingEnabled": true,  // ✅ 保留
+  "mcpServers": { "custom-server": {...} },  // ✅ 保留
+  "permissions": { "allow": ["somePermission"] },  // ✅ 保留
+  "customFeature": true  // ✅ 保留
+}
+```
+
+💡 **建议**：
+- `apiConfigs.json` 只需存储不同的 API 凭证信息
+- 在 `settings.json` 中配置你的个性化设置（permissions、model、MCP 等）
+- 切换 API 时无需担心丢失自定义配置
 
 ### 命令
 
@@ -431,11 +481,34 @@ ccs unknown
 - 确保 `~/.claude/apiConfigs.json` 和 `~/.claude/settings.json` 文件存在并包含有效的配置信息
 - 工具会自动创建 `~/.claude` 目录（如果不存在）
 - 确认操作时默认为"是"，直接按Enter键即可确认
-- 切换配置时会完全替换 `settings.json` 文件内容
+- **v1.8.0+**: 切换配置时只更新 API 凭证，保留所有其他自定义设置（详见上方"配置切换行为"说明）
 - 使用 `ntf` 命令需要先在企微群中添加机器人并获取Webhook地址
 - `notify.json` 文件首次使用时会自动创建
 
 ## 更新日志
+
+### 1.8.0 配置切换优化（重要更新）⚡
+
+**重大改进：智能配置保留机制**
+
++ **配置切换优化**: 切换配置时只更新 API 凭证，保留所有其他设置
+  - 只更新：`_configName`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_BASE_URL`
+  - 保留：`permissions`、`model`、`alwaysThinkingEnabled`、`hooks`、`statusLine`、`mcpServers` 等所有自定义字段
++ **新增配置名称标记**: settings.json 中新增 `_configName` 字段，记录当前使用的配置
++ **改进配置匹配**: 优先使用配置名称匹配，提升匹配速度和准确性
++ **向后兼容**: 完全兼容旧版本的配置文件格式
+
+**升级说明**：
+- 从旧版本升级后，首次切换配置会自动添加 `_configName` 字段
+- 现有的自定义配置（如 `alwaysThinkingEnabled`）不会丢失
+- 无需手动迁移配置文件
+
+**典型使用场景**：
+```bash
+# 你可以在 settings.json 中配置 MCP、自定义权限等
+# 然后通过 ccs list 快速切换不同的 API 提供商
+# 无需担心自定义配置被覆盖
+```
 
 ### 1.7.0 健康检查
 
