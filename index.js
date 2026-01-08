@@ -17,7 +17,7 @@ const notify = require('./notify');
 const health = require('./health');
 
 // 版本号
-const VERSION = '1.7.0';
+const VERSION = '1.8.1';
 
 // 配置文件路径
 const CONFIG_DIR = path.join(os.homedir(), '.claude');
@@ -301,7 +301,7 @@ function listAndSelectConfig() {
 function processSelectedConfig(selectedConfig) {
   console.log(chalk.cyan('\n当前选择的配置:'));
   console.log(JSON.stringify(selectedConfig, null, 2));
-  
+
   inquirer
     .prompt([
       {
@@ -315,9 +315,9 @@ function processSelectedConfig(selectedConfig) {
       if (confirmAnswer.confirm) {
         // 保存配置时保持现有的hooks设置
         saveSettingsPreservingHooks(selectedConfig.config);
-        
+
         console.log(chalk.green(`\n成功切换到配置: ${selectedConfig.name}`));
-        
+
         // 显示当前配置信息
         console.log(chalk.cyan('\n当前激活配置详情:'));
         const { name, config } = selectedConfig;
@@ -325,38 +325,110 @@ function processSelectedConfig(selectedConfig) {
         console.log(chalk.white(`API Key: ${config.env.ANTHROPIC_AUTH_TOKEN}`));
         console.log(chalk.white(`Base URL: ${config.env.ANTHROPIC_BASE_URL}`));
         console.log(chalk.white(`Model: ${config.model || 'default'}`));
-        
-        // 询问是否要在当前目录运行 Claude
-        inquirer
-          .prompt([
-            {
-              type: 'confirm',
-              name: 'runClaude',
-              message: '是否要在当前目录运行 claude?',
-              default: true
-            }
-          ])
-          .then(runAnswer => {
-            if (runAnswer.runClaude) {
-              console.log(chalk.green('\n正在启动 Claude...'));
-              
-              // 启动 Claude
-              const claudeProcess = spawn('claude', [], {
-                stdio: 'inherit',
-                cwd: process.cwd()
-              });
-              
-              claudeProcess.on('error', (error) => {
-                console.error(chalk.red(`启动 Claude 失败: ${error.message}`));
-                console.log(chalk.yellow('请确保 Claude CLI 已正确安装'));
-              });
-            } else {
-              console.log(chalk.yellow('您可以稍后手动运行 claude 命令'));
-            }
-          })
-          .catch(error => {
-            console.error(chalk.red(`发生错误: ${error.message}`));
-          });
+
+        // 检查是否有运行中的 Claude 进程
+        const { execSync } = require('child_process');
+        let hasRunningClaude = false;
+        try {
+          const result = execSync('pgrep -f "claude"', { encoding: 'utf8' });
+          hasRunningClaude = result.trim().length > 0;
+        } catch (e) {
+          // pgrep 没有找到进程时会抛出错误，这是正常的
+          hasRunningClaude = false;
+        }
+
+        if (hasRunningClaude) {
+          // 有运行中的 Claude 进程，询问是否重启
+          console.log(chalk.yellow('\n检测到有运行中的 Claude 进程'));
+          inquirer
+            .prompt([
+              {
+                type: 'confirm',
+                name: 'restartClaude',
+                message: '是否重启 Claude 以应用新配置?',
+                default: true
+              }
+            ])
+            .then(restartAnswer => {
+              if (restartAnswer.restartClaude) {
+                console.log(chalk.yellow('\n正在终止现有 Claude 进程...'));
+                try {
+                  execSync('pkill -f "claude"', { encoding: 'utf8' });
+                } catch (e) {
+                  // 忽略错误
+                }
+                console.log(chalk.green('✓ Claude 进程已终止'));
+                console.log(chalk.green('✓ 新配置将在下次启动 Claude 时生效'));
+
+                // 询问是否在当前目录启动 Claude
+                inquirer
+                  .prompt([
+                    {
+                      type: 'confirm',
+                      name: 'startClaude',
+                      message: '是否要在当前目录启动 Claude Code?',
+                      default: true
+                    }
+                  ])
+                  .then(startAnswer => {
+                    if (startAnswer.startClaude) {
+                      console.log(chalk.green('\n正在启动 Claude (opus 模型)...'));
+                      const claudeProcess = spawn('claude', ['--model', 'opus'], {
+                        stdio: 'inherit',
+                        cwd: process.cwd()
+                      });
+
+                      claudeProcess.on('error', (error) => {
+                        console.error(chalk.red(`启动 Claude 失败: ${error.message}`));
+                        console.log(chalk.yellow('请确保 Claude CLI 已正确安装'));
+                      });
+                    } else {
+                      console.log(chalk.yellow('您可以稍后手动运行 claude --model opus 命令'));
+                    }
+                  })
+                  .catch(error => {
+                    console.error(chalk.red(`发生错误: ${error.message}`));
+                  });
+              } else {
+                console.log(chalk.yellow('配置已更新，请手动重启 Claude 以应用新配置'));
+              }
+            })
+            .catch(error => {
+              console.error(chalk.red(`发生错误: ${error.message}`));
+            });
+        } else {
+          // 没有运行中的 Claude 进程，询问是否启动
+          inquirer
+            .prompt([
+              {
+                type: 'confirm',
+                name: 'runClaude',
+                message: '是否要在当前目录运行 claude?',
+                default: true
+              }
+            ])
+            .then(runAnswer => {
+              if (runAnswer.runClaude) {
+                console.log(chalk.green('\n正在启动 Claude (opus 模型)...'));
+
+                // 启动 Claude，使用 --model opus
+                const claudeProcess = spawn('claude', ['--model', 'opus'], {
+                  stdio: 'inherit',
+                  cwd: process.cwd()
+                });
+
+                claudeProcess.on('error', (error) => {
+                  console.error(chalk.red(`启动 Claude 失败: ${error.message}`));
+                  console.log(chalk.yellow('请确保 Claude CLI 已正确安装'));
+                });
+              } else {
+                console.log(chalk.yellow('您可以稍后手动运行 claude 命令'));
+              }
+            })
+            .catch(error => {
+              console.error(chalk.red(`发生错误: ${error.message}`));
+            });
+        }
       } else {
         console.log(chalk.yellow('\n操作已取消'));
       }
@@ -543,7 +615,11 @@ program
 
 const openCommand = program
   .command('o')
-  .description('打开Claude配置文件');
+  .description('打开Claude配置文件')
+  .action(() => {
+    // 没有子命令时，显示交互式选择菜单
+    selectAndOpenConfigFile();
+  });
 
 openCommand
   .command('api')
@@ -559,11 +635,60 @@ openCommand
     openConfigFile(SETTINGS_FILE);
   });
 
+/**
+ * 交互式选择并打开配置文件
+ */
+function selectAndOpenConfigFile() {
+  const choices = [
+    {
+      name: `1. settings.json    - 当前激活的配置 (${SETTINGS_FILE})`,
+      value: SETTINGS_FILE
+    },
+    {
+      name: `2. apiConfigs.json  - 所有API配置列表 (${API_CONFIGS_FILE})`,
+      value: API_CONFIGS_FILE
+    }
+  ];
+
+  inquirer
+    .prompt([
+      {
+        type: 'list',
+        name: 'configFile',
+        message: '请选择要打开的配置文件:',
+        choices: choices
+      }
+    ])
+    .then(answers => {
+      openConfigFile(answers.configFile);
+    })
+    .catch(error => {
+      console.error(chalk.red(`发生错误: ${error.message}`));
+    });
+}
+
 // 注册notify相关命令
 notify.registerNotifyCommands(program);
 
 // 注册health相关命令
 health.registerHealthCommands(program);
+
+// opus 命令 - 在当前目录启动 Claude (opus 模型)
+program
+  .command('opus')
+  .description('在当前目录启动 Claude (opus 模型)')
+  .action(() => {
+    console.log(chalk.green('正在启动 Claude (opus 模型)...'));
+    const claudeProcess = spawn('claude', ['--model', 'opus'], {
+      stdio: 'inherit',
+      cwd: process.cwd()
+    });
+
+    claudeProcess.on('error', (error) => {
+      console.error(chalk.red(`启动 Claude 失败: ${error.message}`));
+      console.log(chalk.yellow('请确保 Claude CLI 已正确安装'));
+    });
+  });
 
 // 添加错误处理
 program.on('command:*', (operands) => {

@@ -9,6 +9,7 @@ const chalk = require('chalk');
 const os = require('os');
 const readline = require('readline');
 const https = require('https');
+const inquirer = require('inquirer');
 
 // 配置文件路径
 const CONFIG_DIR = path.join(os.homedir(), '.claude');
@@ -462,7 +463,11 @@ function registerNotifyCommands(program) {
   const notifyCommand = program
     .command('notify')
     .alias('ntf')
-    .description('配置企微通知设置');
+    .description('配置企微通知设置')
+    .action(() => {
+      // 直接输入 ccs notify 或 ccs ntf 时显示交互式选择菜单
+      selectNotifyAction();
+    });
 
   notifyCommand
     .command('setup')
@@ -487,18 +492,52 @@ function registerNotifyCommands(program) {
       ensureConfigDir();
       testNotification();
     });
+}
 
-  // 保留原有的ntf命令作为兼容性（独立命令）
-  program
-    .command('ntfold')
-    .description('(已废弃) 原ntf命令，请使用 ccs notify 命令')
-    .action(() => {
-      console.log(chalk.yellow('原ntf监听命令已废弃，现在使用ClaudeCode Hooks机制'));
-      console.log(chalk.cyan('请使用以下命令:'));
-      console.log(chalk.cyan('  ccs notify setup   - 设置企微通知'));
-      console.log(chalk.cyan('  ccs notify status  - 查看通知状态'));
-      console.log(chalk.cyan('  ccs notify test    - 测试通知功能'));
-      console.log(chalk.yellow('\n配置完成后，ClaudeCode将自动发送通知，无需手动启动监听'));
+/**
+ * 交互式选择通知操作
+ */
+function selectNotifyAction() {
+  const choices = [
+    {
+      name: '1. setup   - 设置企微通知',
+      value: 'setup'
+    },
+    {
+      name: '2. status  - 查看通知状态',
+      value: 'status'
+    },
+    {
+      name: '3. test    - 测试通知功能',
+      value: 'test'
+    }
+  ];
+
+  inquirer
+    .prompt([
+      {
+        type: 'list',
+        name: 'action',
+        message: '请选择操作:',
+        choices: choices
+      }
+    ])
+    .then(answers => {
+      ensureConfigDir();
+      switch (answers.action) {
+        case 'setup':
+          setupNotifyConfig();
+          break;
+        case 'status':
+          showNotifyStatus();
+          break;
+        case 'test':
+          testNotification();
+          break;
+      }
+    })
+    .catch(error => {
+      console.error(chalk.red(`发生错误: ${error.message}`));
     });
 }
 

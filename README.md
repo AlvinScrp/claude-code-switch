@@ -4,7 +4,11 @@
 
 [ClaudeCode API 站点推荐](https://github.com/AlvinScrp/claude-code-switch/blob/main/ClaudeCode%20API%E7%AB%99.md)
 
-**强烈推荐这个**倍率高5块钱相当于10美金 ：[https://instcopilot-api.com/register?aff=J2wX](https://instcopilot-api.com/register?aff=J2wX)
+[https://duckcoding.com/register?aff=J2wX](https://duckcoding.com/register?aff=J2wX)稳定，有纯血max账号和特价2api
+
+[https://free.duckcoding.com/register?aff=AIYJ](https://free.duckcoding.com/register?aff=AIYJ)公益的2api 
+
+ [https://anyrouter.top/register?aff=XkkW](https://anyrouter.top/register?aff=XkkW)
 
 ## 安装
 
@@ -155,51 +159,29 @@ ccs ls
 1. **光标选择**: 使用键盘上下箭头选择配置，按Enter确认
 2. **手动输入**: 选择"输入序号..."选项，然后输入配置的序号
 
-#### 直接设置当前使用的API配置
+#### 直接设置当前使用的API配置（已移除）
 
-```bash
-ccs use <序号>
-```
-
-例如：
-
-```bash
-ccs use 2
-```
-
-输出示例：
-
-```
-当前选择的配置:
-{
-  "name": "zone",
-  "config": {
-    "env": {
-      "ANTHROPIC_AUTH_TOKEN": "sk-xxxxxx",
-      "ANTHROPIC_BASE_URL": "https://zone.veloera.org/pg",
-      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
-    },
-    "permissions": {
-      "allow": [],
-      "deny": []
-    },
-    "model": "claude-sonnet-4-20250514"
-  }
-}
-
-? 确认切换到此配置? Yes
-
-成功切换到配置: zone
-```
+> 注意：`ccs use <序号>` 命令已在 1.8.0 版本中移除，请使用 `ccs ls` 命令进行交互式选择。
 
 #### 打开配置文件
 
 ```bash
+# 直接运行，显示交互式选择菜单
+ccs o
+
 # 打开API配置文件 (apiConfigs.json)
 ccs o api
 
 # 打开设置配置文件 (settings.json)
 ccs o setting
+```
+
+运行 `ccs o` 会显示交互式选择菜单：
+
+```
+? 请选择要打开的配置文件:
+❯ 1. settings.json    - 当前激活的配置 (~/.claude/settings.json)
+  2. apiConfigs.json  - 所有API配置列表 (~/.claude/apiConfigs.json)
 ```
 
 这些命令会在默认编辑器中打开相应的配置文件，方便直接编辑配置。如果文件不存在，会自动创建包含示例内容的配置文件。
@@ -256,7 +238,30 @@ ccs health
 
 当检测到非默认端点可用时，会显示实际工作的端点信息，帮助用户了解服务的实际API格式。
 
+#### 快速启动 Claude (opus 模型)
+
+```bash
+ccs opus
+```
+
+在当前目录启动 Claude Code，并自动使用 opus 模型：
+
+```
+正在启动 Claude (opus 模型)...
+```
+
+等同于执行 `claude --model opus`。
+
 #### 企微通知配置
+
+直接运行 `ccs notify` 或 `ccs ntf` 会显示交互式选择菜单：
+
+```
+? 请选择操作: (Use arrow keys)
+❯ 1. setup   - 设置企微通知
+  2. status  - 查看通知状态
+  3. test    - 测试通知功能
+```
 
 ##### 设置企微通知
 
@@ -367,7 +372,7 @@ ccs -v
 输出示例：
 
 ```
-ccs 版本: 1.6.0
+ccs 版本: 1.8.0
 ```
 
 #### 显示帮助信息
@@ -389,15 +394,15 @@ Options:
 
 Commands:
   list, ls           列出所有可用的API配置并提示选择
-  use <index>        设置当前使用的API配置
-  health             检查各API端点的可用性与网络延迟
+  o                  打开Claude配置文件
+    api              打开API配置文件 (apiConfigs.json)
+    setting          打开设置配置文件 (settings.json)
   notify, ntf        配置企微通知设置
     setup            设置企微机器人webhook地址
     status           查看当前通知配置状态
     test             测试企微通知功能
-  o                  打开Claude配置文件
-    api              打开API配置文件 (apiConfigs.json)
-    setting          打开设置配置文件 (settings.json)
+  health             检查各API端点的可用性与网络延迟
+  opus               在当前目录启动 Claude (opus 模型)
   help [command]     display help for command
 ```
 
@@ -416,12 +421,12 @@ ccs unknown
 
 可用命令:
   list
-  ls  
-  use
-  health
+  ls
+  o
   notify
   ntf
-  o
+  health
+  opus
 
 使用 --help 查看更多信息
 ```
@@ -436,6 +441,15 @@ ccs unknown
 - `notify.json` 文件首次使用时会自动创建
 
 ## 更新日志
+
+### 1.8.0 功能优化
+
++ **新增 `ccs opus` 命令**: 在当前目录快速启动 Claude (opus 模型)
++ **优化 `ccs o` 命令**: 直接运行显示交互式选择菜单，可选择打开 settings.json 或 apiConfigs.json
++ **优化 `ccs notify/ntf` 命令**: 直接运行显示交互式选择菜单，可选择 setup/status/test
++ **智能进程重启**: `ccs ls` 切换配置后，自动检测运行中的 Claude 进程并询问是否重启
++ **自动使用 opus 模型**: 切换配置后启动 Claude 时自动使用 `--model opus` 参数
++ **移除 `ccs use` 命令**: 统一使用 `ccs ls` 进行交互式配置选择
 
 ### 1.7.0 健康检查
 
